@@ -1,6 +1,6 @@
 from .base import BaseCache, InvalidCacheBackendError
 from ..utils import importlib
-from ..utils.encoding import smart_text, smart_bytes, bytes_type, smart_unicode
+from ..utils.encoding import smart_str, smart_unicode
 
 try:
     import cPickle as pickle
@@ -27,7 +27,7 @@ class CacheKey(object):
         return self._key == other
 
     def __str__(self):
-        return smart_text(self._key)
+        return smart_str(self._key)
 
     def __unicode__(self):
         return smart_unicode(self._key)
@@ -83,12 +83,8 @@ class CacheClass(BaseCache):
         self._params = params
 
         unix_socket_path = None
-        if ':' in self.server:
-            host, port = self.server.rsplit(':', 1)
-            try:
-                port = int(port)
-            except (ValueError, TypeError):
-                raise InvalidCacheBackendError("port value must be an integer")
+        if isinstance(self.server, list):
+            host, port = self.server
         else:
             host, port = None, None
             unix_socket_path = self.server
@@ -114,10 +110,6 @@ class CacheClass(BaseCache):
         return self._server or "127.0.0.1:6379"
 
     @property
-    def params(self):
-        return self._params or {}
-
-    @property
     def options(self):
         return self.params.get('OPTIONS', {})
 
@@ -127,7 +119,7 @@ class CacheClass(BaseCache):
         try:
             _db = int(_db)
         except (ValueError, TypeError):
-            raise ImproperlyConfigured("db value must be an integer")
+            raise Exception("db value must be an integer")
         return _db
 
     @property
@@ -144,7 +136,7 @@ class CacheClass(BaseCache):
             mod = importlib.import_module(mod_path)
             parser_class = getattr(mod, cls_name)
         except (AttributeError, ImportError):
-            raise ImproperlyConfigured("Could not find parser class '%s'" % parser_class)
+            raise Exception("Could not find parser class '%s'" % parser_class)
         return parser_class
 
     def __getstate__(self):
@@ -244,7 +236,7 @@ class CacheClass(BaseCache):
         """
         Unpickles the given value.
         """
-        value = smart_bytes(value)
+        value = smart_str(value)
         return pickle.loads(value)
 
     def get_many(self, keys, version=None):
@@ -264,8 +256,8 @@ class CacheClass(BaseCache):
                 value = int(value)
             except (ValueError, TypeError):
                 value = self.unpickle(value)
-            if isinstance(value, bytes_type):
-                value = smart_text(value)
+            if isinstance(value, basestring):
+                value = smart_str(value)
             recovered_data[map_keys[key]] = value
         return recovered_data
 

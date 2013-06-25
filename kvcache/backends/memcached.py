@@ -10,7 +10,7 @@ from ..utils.encoding import force_str
 class BaseMemcachedCache(BaseCache):
     def __init__(self, server, params, library, value_not_found_exception):
         super(BaseMemcachedCache, self).__init__(params)
-        if isinstance(server, six.string_types):
+        if isinstance(server, basestring):
             self._servers = server.split(';')
         else:
             self._servers = server

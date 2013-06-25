@@ -9,10 +9,11 @@ except ImportError:
     import pickle
 
 from .base import BaseCache, MEMCACHE_MAX_KEY_LENGTH
-from ..utils.encoding import force_bytes
 
 
 class BaseDatabaseCache(BaseCache):
+    place_hold = '?'
+
     def __init__(self, table, params):
         BaseCache.__init__(self, params)
         self._table = table
@@ -37,6 +38,11 @@ class BaseDatabaseCache(BaseCache):
     def conn(self):
         raise NotImplementedError
 
+    @property
+    def sql_params(self):
+        return {'table': self._table, 'place_hold': self.place_hold}
+
+
 class DatabaseCache(BaseDatabaseCache):
 
     # This class uses cursors provided by the database connection. This means
@@ -48,23 +54,21 @@ class DatabaseCache(BaseDatabaseCache):
     # datetimes aren't made naive for databases that don't support time zones.
     # We work around this problem by always using naive datetimes when writing
     # expiration values, in UTC when USE_TZ = True and in local time otherwise.
-
+    
     def get(self, key, default=None, version=None):
         key = self.make_key(key, version=version)
         self.validate_key(key)
         cursor = self.cursor()
 
-        cursor.execute("SELECT cache_key, value, expires FROM %s "
-                       "WHERE cache_key = %%s" % table, [key])
+        cursor.execute("SELECT cache_key, value, expires FROM %(table)s "
+                       "WHERE cache_key = %(place_hold)s" % self.sql_params, [key])
         row = cursor.fetchone()
         if row is None:
             return default
         now = time.time()
         if row[2] < now:
-            db = router.db_for_write(self.cache_model_class)
-            cursor = connections[db].cursor()
-            cursor.execute("DELETE FROM %s "
-                           "WHERE cache_key = %%s" % table, [key])
+            cursor.execute("DELETE FROM %(table)s "
+                           "WHERE cache_key = %(place_hold)s" % self.sql_params, [key])
             return default
         value = row[1]
         return pickle.loads(value)
@@ -83,29 +87,29 @@ class DatabaseCache(BaseDatabaseCache):
         if timeout is None:
             timeout = self.default_timeout
         cursor = self.cursor()
-
-        cursor.execute("SELECT COUNT(*) FROM %s" % table)
+        
+        cursor.execute("SELECT COUNT(*) FROM %(table)s" % self.sql_params)
         num = cursor.fetchone()[0]
-        now = timezone.now()
         now = int(time.time())
         exp = now + timeout
         if num > self._max_entries:
             self._cull(db, cursor, now)
         pickled = pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
-        cursor.execute("SELECT cache_key, expires FROM %s "
-                       "WHERE cache_key = %%s" % table, [key])
+        sql = "SELECT cache_key, expires FROM %(table)s WHERE cache_key = %(place_hold)s" % self.sql_params
+        cursor.execute(sql, [key])
         try:
             result = cursor.fetchone()
             if result and (mode == 'set' or
                     (mode == 'add' and result[1] < now)):
-                cursor.execute("UPDATE %s SET value = %%s, expires = %%s "
-                               "WHERE cache_key = %%s" % table,
+                cursor.execute("UPDATE %(table)s SET value = %(place_hold)s, expires = %(place_hold)s "
+                               "WHERE cache_key = %(place_hold)s" % self.sql_params,
                                [pickled, exp, key])
             else:
-                cursor.execute("INSERT INTO %s (cache_key, value, expires) "
-                               "VALUES (%%s, %%s, %%s)" % table,
-                               [key, pickled, exp])
+                sql = "INSERT INTO %(table)s (cache_key, value, expires) VALUES (%(place_hold)s, %(place_hold)s, %(place_hold)s)" % self.sql_params
+                cursor.execute(sql, [str(key), pickled, exp])
+            self._conn.commit()
         except:
+            logging.error('set fail', exc_info=True)
             # To be threadsafe, updates/inserts are allowed to fail silently
             return False
         else:
@@ -117,7 +121,7 @@ class DatabaseCache(BaseDatabaseCache):
 
         cursor = self.cursor()
 
-        cursor.execute("DELETE FROM %s WHERE cache_key = %%s" % table, [key])
+        cursor.execute("DELETE FROM %(table)s WHERE cache_key = %(place_hold)s" % self.sql_params, [key])
 
     def has_key(self, key, version=None):
         key = self.make_key(key, version=version)
@@ -125,8 +129,8 @@ class DatabaseCache(BaseDatabaseCache):
 
         cursor = self.cursor()
         now = int(time.time())
-        cursor.execute("SELECT cache_key FROM %s "
-                       "WHERE cache_key = %%s and expires > %%s" % table,
+        cursor.execute("SELECT cache_key FROM %(table)s "
+                       "WHERE cache_key = %(place_hold)s and expires > %(place_hold)s" % self.sql_params,
                        [key, now])
         return cursor.fetchone() is not None
 
@@ -137,20 +141,20 @@ class DatabaseCache(BaseDatabaseCache):
             # When USE_TZ is True, 'now' will be an aware datetime in UTC.
             cursor = int(time.time())
             now = int(time.time())
-            table = connections[db].ops.quote_name(self._table)
-            cursor.execute("DELETE FROM %s WHERE expires < %%s" % table,
+            cursor.execute("DELETE FROM %(table)s WHERE expires < %(place_hold)s" % self.sql_params,
                            [connections[db].ops.value_to_db_datetime(now)])
-            cursor.execute("SELECT COUNT(*) FROM %s" % table)
+            """
+            cursor.execute("SELECT COUNT(*) FROM %(table)s" % self.sql_params)
             num = cursor.fetchone()[0]
             if num > self._max_entries:
                 cull_num = num // self._cull_frequency
-                cursor.execute(
-                    connections[db].ops.cache_key_culling_sql() % table,
+                cursor.execute(self.cache_key_culling_sql() % table,
                     [cull_num])
-                cursor.execute("DELETE FROM %s "
-                               "WHERE cache_key < %%s" % table,
+                cursor.execute("DELETE FROM %(table)s "
+                               "WHERE cache_key < %(place_hold)s" % self.sql_params,
                                [cursor.fetchone()[0]])
+            """
 
     def clear(self):
         cursor = self.cursor()
-        cursor.execute('DELETE FROM %s' % table)
+        cursor.execute('DELETE FROM %(table)s' % self.sql_params)

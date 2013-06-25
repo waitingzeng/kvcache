@@ -18,8 +18,12 @@ BACKENDS = {
     'memcached': 'memcached',
     'locmem': 'locmem',
     'file': 'filebased',
-    'db': 'db',
+    'mysql': 'mysql',
     'dummy': 'dummy',
+    'sqlite': 'sqlite',
+    'redis': 'dredis',
+    'mongodb': 'mongodb',
+    's3': 's3',
 }
 
 DEFAULT_CACHE_ALIAS = 'default'

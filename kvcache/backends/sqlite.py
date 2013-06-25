@@ -5,14 +5,15 @@ import logging
 from datetime import datetime
 from .dbbase import DatabaseCache
 import MySQLdb
+import sqlite3
 
 
-class MySQLDatabaseCache(DatabaseCache):
-    def create(self, name):
-        
+class SqliteDatabaseCache(DatabaseCache):
+    def create(self):
+        self._reconn()
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
                                 cache_key NOT NULL, value, expires, UNIQUE (cache_key) );'''
-        self._create(SQL_CREATE_TABLE, name)
+        self._create(SQL_CREATE_TABLE, self._table)
 
     def _reconn(self, num=28800, stime=3):
         self.conn()
@@ -24,9 +25,10 @@ class MySQLDatabaseCache(DatabaseCache):
             self._conn.text_factory = str
             return True
         except:
+            logging.error('can not connect db', exc_info=True)
             pass
         return False
 
 # For backwards compatibility
-class CacheClass(MySQLDatabaseCache):
+class CacheClass(SqliteDatabaseCache):
     pass

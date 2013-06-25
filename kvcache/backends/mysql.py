@@ -1,13 +1,17 @@
+#!/user/bin/python
+#coding=utf8
 "Database cache backend."
 import base64
 import time
 import logging
 from datetime import datetime
 from .dbbase import DatabaseCache
+from .base import MEMCACHE_MAX_KEY_LENGTH
 import MySQLdb
 
 
 class MySQLDatabaseCache(DatabaseCache):
+    place_hold = '%s'
     def create(self):
         ''' create collection '''
 
@@ -38,9 +42,9 @@ class MySQLDatabaseCache(DatabaseCache):
         params = self.params
         try:
             self._conn = MySQLdb.connect(
-                host=params['host'], port=params['port'],
-                user=params['username'], passwd=params[
-                    'password'],
+                host=params['host'], port=params.get('port', 3306),
+                user=params['user'], passwd=params[
+                    'psw'],
                 db=params['db'])
             return True
         except MySQLdb.OperationalError, err:

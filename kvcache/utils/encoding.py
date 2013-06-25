@@ -96,6 +96,9 @@ def force_unicode(s, encoding='utf-8', strings_only=False, errors='strict'):
                     errors) for arg in s])
     return s
 
+def force_str(*args, **kwargs):
+    return str(force_unicode(*args, **kwargs))
+
 def smart_str(s, encoding='utf-8', strings_only=False, errors='strict'):
     """
     Returns a bytestring version of 's', encoded as specified in 'encoding'.

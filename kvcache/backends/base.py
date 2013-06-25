@@ -9,6 +9,8 @@ from ..utils.importlib import import_module
 class CacheKeyWarning(Exception):
     pass
 
+class InvalidCacheBackendError(Exception):
+    pass
 
 # Memcached does not accept keys longer than this.
 MEMCACHE_MAX_KEY_LENGTH = 250
