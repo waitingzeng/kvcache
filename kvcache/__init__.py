@@ -46,6 +46,10 @@ def parse_backend_uri(backend_uri):
     if host.endswith('/'):
         host = host[:-1]
 
+    if host.find(':') != -1:
+        host = host.split(':', 1)
+        host[1] = int(host[1])
+
     return scheme, host, params
 
 def get_cache(backend, **kwargs):

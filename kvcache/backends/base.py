@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 import warnings
 
-from utils.importlib import import_module
+from ..utils.importlib import import_module
 
 
 class CacheKeyWarning(Exception):
@@ -40,6 +40,7 @@ def get_key_func(key_func):
 
 class BaseCache(object):
     def __init__(self, params):
+        self.params = params
         timeout = params.get('timeout', params.get('TIMEOUT', 300))
         try:
             timeout = int(timeout)

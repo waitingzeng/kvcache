@@ -1,44 +1,75 @@
 "Database cache backend."
 import base64
 import time
+import logging
 from datetime import datetime
 
 try:
-    from django.utils.six.moves import cPickle as pickle
+    import cPickle as pickle
 except ImportError:
     import pickle
 
 from django.conf import settings
-from django.core.cache.backends.base import BaseCache
+from .base import BaseCache, MEMCACHE_MAX_KEY_LENGTH
 from django.db import connections, router, transaction, DatabaseError
 from django.utils import timezone, six
-from django.utils.encoding import force_bytes
+from ..utils.encoding import force_bytes
 
-
-class Options(object):
-    """A class that will quack like a Django model _meta class.
-
-    This allows cache operations to be controlled by the router
-    """
-    def __init__(self, table):
-        self.db_table = table
-        self.app_label = 'django_cache'
-        self.module_name = 'cacheentry'
-        self.verbose_name = 'cache entry'
-        self.verbose_name_plural = 'cache entries'
-        self.object_name =  'CacheEntry'
-        self.abstract = False
-        self.managed = True
-        self.proxy = False
 
 class BaseDatabaseCache(BaseCache):
     def __init__(self, table, params):
         BaseCache.__init__(self, params)
         self._table = table
+        self.create()
 
-        class CacheEntry(object):
-            _meta = Options(table)
-        self.cache_model_class = CacheEntry
+    def cursor(self):
+        self._reconn()
+        return self._conn.cursor()
+
+    def create(self):
+        ''' create collection '''
+
+        SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %%s (
+                                cache_key varchar(%s) PRIMARY KEY,
+                                value MEDIUMBLOB,
+                                expires int NOT NULL
+                                ) ENGINE=MYISAM  DEFAULT CHARSET=utf8;;''' % MEMCACHE_MAX_KEY_LENGTH
+
+        self._create(SQL_CREATE_TABLE, self._table)
+
+    def _create(self, sql_create_table, name):
+        ''' create collection by name '''
+        cursor = self.cursor()
+        cursor.execute(sql_create_table % name)
+        self._conn.commit()
+
+    def _reconn(self, num=28800, stime=3):
+        _number = 0
+        _status = True
+        while _status and _number <= num:
+            try:
+                self._conn.ping()  # cping 校验连接是否异常
+                _status = False
+            except:
+                if self.conn() == True:  # 重新连接,成功退出
+                    _status = False
+                    break
+                _number += 1
+                logging.error('connection to mysql %s fail', self.uri)
+                time.sleep(stime)
+
+    def conn(self):
+        params = self.params
+        try:
+            self._conn = MySQLdb.connect(
+                host=params['host'], port=params['port'],
+                user=params['username'], passwd=params[
+                    'password'],
+                db=params['db'])
+            return True
+        except MySQLdb.OperationalError, err:
+            pass
+        return False
 
 class DatabaseCache(BaseDatabaseCache):
 
