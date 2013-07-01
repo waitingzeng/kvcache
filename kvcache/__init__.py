@@ -1,14 +1,10 @@
-try:
-    from urllib.parse import parse_qsl
-except ImportError:     # Python 2
-    from urlparse import parse_qsl
-
+import urlparse
 from .backends.base import (
     InvalidCacheBackendError, CacheKeyWarning, BaseCache)
 from .utils import importlib
 
 __all__ = [
-    'get_cache', 'cache', 'DEFAULT_CACHE_ALIAS'
+    'get_cache'
 ]
 
 # Name for use in settings file --> name of module in "backends" directory.
@@ -24,9 +20,12 @@ BACKENDS = {
     'redis': 'dredis',
     'mongodb': 'mongodb',
     's3': 's3',
+    'leveldb': 'ldb',
+    'bdm': 'bdb'
 }
 
-DEFAULT_CACHE_ALIAS = 'default'
+for scheme in BACKENDS.keys():
+    urlparse.uses_netloc.append(scheme)
 
 def parse_backend_uri(backend_uri):
     """
@@ -34,27 +33,17 @@ def parse_backend_uri(backend_uri):
     host and any extra params that are required for the backend. Returns a
     (scheme, host, params) tuple.
     """
-    if backend_uri.find(':') == -1:
+    if backend_uri.find('://') == -1:
         raise InvalidCacheBackendError("Backend URI must start with scheme://")
-    scheme, rest = backend_uri.split(':', 1)
-    if not rest.startswith('//'):
-        raise InvalidCacheBackendError("Backend URI must start with scheme://")
+    
+    url = urlparse.urlparse(backend_uri)
+    if url.scheme not in BACKENDS:
+        raise InvalidCacheBackendError("Backend URI invalid scheme")
 
-    host = rest[2:]
-    qpos = rest.find('?')
-    if qpos != -1:
-        params = dict(parse_qsl(rest[qpos+1:]))
-        host = rest[2:qpos]
-    else:
-        params = {}
-    if host.endswith('/'):
-        host = host[:-1]
+    params = dict(urlparse.parse_qsl(url.query))
 
-    if host.find(':') != -1:
-        host = host.split(':', 1)
-        host[1] = int(host[1])
+    return url.scheme, url, params
 
-    return scheme, host, params
 
 def get_cache(backend, **kwargs):
     """

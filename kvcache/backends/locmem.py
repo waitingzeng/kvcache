@@ -1,9 +1,8 @@
 "Thread-safe in-memory cache backend."
 
 import time
-import cPickle as pickle
 
-from .base import BaseCache
+from .base import BaseCache, PickleException
 from ..utils.synch import RWLock
 
 # Global in-memory store of cache data. Keyed by name, to provide
@@ -27,10 +26,10 @@ class LocMemCache(BaseCache):
             exp = self._expire_info.get(key)
             if exp is None or exp <= time.time():
                 try:
-                    pickled = pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
+                    pickled = self.encode(value)
                     self._set(key, pickled, timeout)
                     return True
-                except pickle.PickleError:
+                except PickleException:
                     pass
             return False
 
@@ -42,11 +41,8 @@ class LocMemCache(BaseCache):
             if exp is None:
                 return default
             elif exp > time.time():
-                try:
-                    pickled = self._cache[key]
-                    return pickle.loads(pickled)
-                except pickle.PickleError:
-                    return default
+                pickled = self._cache[key]
+                return self.decode(pickled, default)
         with self._lock.writer():
             try:
                 del self._cache[key]
@@ -56,7 +52,7 @@ class LocMemCache(BaseCache):
             return default
 
     def _set(self, key, value, timeout=None):
-        if len(self._cache) >= self._max_entries:
+        if self._max_entries and len(self._cache) >= self._max_entries:
             self._cull()
         if timeout is None:
             timeout = self.default_timeout
@@ -68,9 +64,9 @@ class LocMemCache(BaseCache):
         self.validate_key(key)
         with self._lock.writer():
             try:
-                pickled = pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
+                pickled = self.encode(value)
                 self._set(key, pickled, timeout)
-            except pickle.PickleError:
+            except PickleException:
                 pass
 
     def incr(self, key, delta=1, version=None):
@@ -81,9 +77,9 @@ class LocMemCache(BaseCache):
         key = self.make_key(key, version=version)
         with self._lock.writer():
             try:
-                pickled = pickle.dumps(new_value, pickle.HIGHEST_PROTOCOL)
+                pickled = self.encode(new_value)
                 self._cache[key] = pickled
-            except pickle.PickleError:
+            except PickleException:
                 pass
         return new_value
 

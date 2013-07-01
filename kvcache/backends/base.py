@@ -4,6 +4,10 @@ from __future__ import unicode_literals
 import warnings
 
 from ..utils.importlib import import_module
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 
 class CacheKeyWarning(Exception):
@@ -40,6 +44,9 @@ def get_key_func(key_func):
             return getattr(key_func_module, key_func_name)
     return default_key_func
 
+class PickleException(Exception):
+    pass
+
 class BaseCache(object):
     def __init__(self, params):
         self.params = params
@@ -51,11 +58,11 @@ class BaseCache(object):
         self.default_timeout = timeout
 
         options = params.get('OPTIONS', {})
-        max_entries = params.get('max_entries', options.get('MAX_ENTRIES', 300))
+        max_entries = params.get('max_entries', options.get('MAX_ENTRIES', 0))
         try:
             self._max_entries = int(max_entries)
         except (ValueError, TypeError):
-            self._max_entries = 300
+            self._max_entries = 0
 
         cull_frequency = params.get('cull_frequency', options.get('CULL_FREQUENCY', 3))
         try:
@@ -66,6 +73,19 @@ class BaseCache(object):
         self.key_prefix = params.get('KEY_PREFIX', '')
         self.version = params.get('VERSION', 1)
         self.key_func = get_key_func(params.get('KEY_FUNCTION', None))
+
+    def decode(self, value, default=None):
+        try:
+            value = smart_str(value)
+            return pickle.loads(value)
+        except Exception, e:
+            return default
+
+    def encode(self, value, default):
+        try:
+            return pickle.dumps(value)
+        except Exception, e:
+            raise PickleException(e)
 
     def make_key(self, key, version=None):
         """Constructs the key used by all other methods. By default it

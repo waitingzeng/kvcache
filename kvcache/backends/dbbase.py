@@ -2,22 +2,12 @@
 import base64
 import time
 import logging
-
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
 from .base import BaseCache, MEMCACHE_MAX_KEY_LENGTH
 
 
 class BaseDatabaseCache(BaseCache):
     place_hold = '?'
 
-    def __init__(self, table, params):
-        BaseCache.__init__(self, params)
-        self._table = table
-        self.create()
 
     def cursor(self):
         self._reconn()
@@ -71,7 +61,7 @@ class DatabaseCache(BaseDatabaseCache):
                            "WHERE cache_key = %(place_hold)s" % self.sql_params, [key])
             return default
         value = row[1]
-        return pickle.loads(value)
+        return self.decode(value)
 
     def set(self, key, value, timeout=None, version=None):
         key = self.make_key(key, version=version)
@@ -92,9 +82,9 @@ class DatabaseCache(BaseDatabaseCache):
         num = cursor.fetchone()[0]
         now = int(time.time())
         exp = now + timeout
-        if num > self._max_entries:
+        if self._max_entries and num > self._max_entries:
             self._cull(db, cursor, now)
-        pickled = pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
+        pickled = self.encode(value)
         sql = "SELECT cache_key, expires FROM %(table)s WHERE cache_key = %(place_hold)s" % self.sql_params
         cursor.execute(sql, [key])
         try:

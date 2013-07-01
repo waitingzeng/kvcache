@@ -8,12 +8,14 @@ from .base import BaseCache, InvalidCacheBackendError
 from ..utils.encoding import force_str
 
 class BaseMemcachedCache(BaseCache):
-    def __init__(self, server, params, library, value_not_found_exception):
+    def __init__(self, url, params, library, value_not_found_exception):
         super(BaseMemcachedCache, self).__init__(params)
+        server = url.netloc
         if isinstance(server, basestring):
             self._servers = server.split(';')
         else:
             self._servers = server
+        print self._servers
 
         # The exception type to catch from the underlying library for a key
         # that was not found. This is a ValueError for python-memcache,
@@ -22,7 +24,7 @@ class BaseMemcachedCache(BaseCache):
         self.LibraryValueNotFoundException = value_not_found_exception
 
         self._lib = library
-        self._options = params.get('OPTIONS', None)
+        self._options = params
 
     @property
     def _cache(self):

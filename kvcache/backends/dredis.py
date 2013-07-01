@@ -2,10 +2,6 @@ from .base import BaseCache, InvalidCacheBackendError
 from ..utils import importlib
 from ..utils.encoding import smart_str, smart_unicode
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
 
 try:
     import redis
@@ -175,7 +171,7 @@ class CacheClass(BaseCache):
         try:
             result = int(value)
         except (ValueError, TypeError):
-            result = self.unpickle(value)
+            result = self.decode(value)
         return result
 
     def _set(self, key, value, timeout, client, _add_only=False):
@@ -203,12 +199,7 @@ class CacheClass(BaseCache):
         if timeout is None:
             timeout = self.default_timeout
 
-        # If ``value`` is not an int, then pickle it
-        if not isinstance(value, int) or isinstance(value, bool):
-            result = self._set(key, pickle.dumps(value), int(timeout), client, _add_only)
-        else:
-            result = self._set(key, value, int(timeout), client, _add_only)
-        # result is a boolean
+        result = self._set(key, self.encode(value), int(timeout), client, _add_only)
         return result
 
     def delete(self, key, version=None):
@@ -232,13 +223,6 @@ class CacheClass(BaseCache):
         # TODO : potential data loss here, should we only delete keys based on the correct version ?
         self._client.flushdb()
 
-    def unpickle(self, value):
-        """
-        Unpickles the given value.
-        """
-        value = smart_str(value)
-        return pickle.loads(value)
-
     def get_many(self, keys, version=None):
         """
         Retrieve many keys.
@@ -252,12 +236,7 @@ class CacheClass(BaseCache):
         for key, value in zip(new_keys, results):
             if value is None:
                 continue
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                value = self.unpickle(value)
-            if isinstance(value, basestring):
-                value = smart_str(value)
+            value = self.decode(value)
             recovered_data[map_keys[key]] = value
         return recovered_data
 

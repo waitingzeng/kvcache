@@ -7,7 +7,7 @@ import random
 
 
 class KVTests(unittest.TestCase):
-    URI = 'sqlite://test?db=/tmp/test.db'
+    URI = 'sqlite:///tmp/test.db.test'
 
     def test_get_set(self):
         cache = get_cache(self.URI)

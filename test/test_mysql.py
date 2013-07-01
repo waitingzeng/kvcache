@@ -7,7 +7,7 @@ import random
 
 
 class KVTests(unittest.TestCase):
-    URI = 'mysql://test?host=localhost&db=test&user=root&psw=846266'
+    URI = 'mysql://root:846266@localhost/test.test'
 
     def test_get_set(self):
         cache = get_cache(self.URI)

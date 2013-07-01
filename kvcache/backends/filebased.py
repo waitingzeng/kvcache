@@ -4,7 +4,6 @@ import hashlib
 import os
 import shutil
 import time
-import cPickle as pickle
 
 from .base import BaseCache
 from ..utils.encoding import force_bytes
@@ -30,12 +29,12 @@ class FileBasedCache(BaseCache):
         fname = self._key_to_file(key)
         try:
             with open(fname, 'rb') as f:
-                exp = pickle.load(f)
-                now = time.time()
-                if exp < now:
-                    self._delete(fname)
-                else:
-                    return pickle.load(f)
+                pickled = f.read()
+            exp, value = self.decode(pickled)
+            now = time.time()
+            if exp < now:
+                self._delete(fname)
+            return value
         except (IOError, OSError, EOFError, pickle.PickleError):
             pass
         return default
@@ -58,8 +57,8 @@ class FileBasedCache(BaseCache):
 
             with open(fname, 'wb') as f:
                 now = time.time()
-                pickle.dump(now + timeout, f, pickle.HIGHEST_PROTOCOL)
-                pickle.dump(value, f, pickle.HIGHEST_PROTOCOL)
+                data = self.encode((now+timeout, value))
+                f.write(data)
         except (IOError, OSError):
             pass
 
@@ -98,7 +97,7 @@ class FileBasedCache(BaseCache):
             return False
 
     def _cull(self):
-        if int(self._num_entries) < self._max_entries:
+        if self._max_entries and  int(self._num_entries) < self._max_entries:
             return
 
         try:

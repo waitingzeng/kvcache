@@ -3,12 +3,22 @@ import base64
 import time
 import logging
 from datetime import datetime
-from .dbbase import DatabaseCache
+from .dbbase import DatabaseCache, BaseCache
 import MySQLdb
 import sqlite3
 
 
 class SqliteDatabaseCache(DatabaseCache):
+    def __init__(self, url, params):
+        BaseCache.__init__(self, params)
+        self._url = url
+        self.path = self._url.path
+        if self.path.find('.') != -1:
+            self.path, self._table = self.path.rsplit('.', 1)
+        else:
+            self._table = params.get('table', 'kvcache')
+        self.create()
+
     def create(self):
         self._reconn()
         SQL_CREATE_TABLE = '''CREATE TABLE IF NOT EXISTS %s (
@@ -19,9 +29,8 @@ class SqliteDatabaseCache(DatabaseCache):
         self.conn()
 
     def conn(self):
-        params = self.params
         try:
-            self._conn = sqlite3.connect(self.params['db'])
+            self._conn = sqlite3.connect(self.path)
             self._conn.text_factory = str
             return True
         except:

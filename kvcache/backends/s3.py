@@ -4,20 +4,17 @@
 #
 # Taken directly from django.core.cache.backends.filebased.FileBasedCache
 # and adapted for S3.
-
+# need django-storages
 import time
 import hashlib
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
 from storages.backends import s3boto
 from django.core.files.base import ContentFile
-from .base import BaseCache
+from .base import BaseCache, PickleException
+
 
 class AmazonS3Cache(BaseCache):
+
     def __init__(self, location, params):
         """
             location is not used but otherwise Django crashes.
@@ -27,7 +24,8 @@ class AmazonS3Cache(BaseCache):
 
         # Amazon and boto has a maximum limit of 1000 for get_all_keys(). See:
         # http://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketGET.html
-        # This implementation of the GET operation returns some or all (up to 1000) of the objects in a bucket....
+        # This implementation of the GET operation returns some or all (up to
+        # 1000) of the objects in a bucket....
 
         if self._max_entries > 1000:
             self._max_entries = 1000
@@ -38,18 +36,21 @@ class AmazonS3Cache(BaseCache):
         # in v1.2 we update to latest django-storages 1.1.8 which changes variable names
         # in non-backward compatible fashion
         self._options['ACCESS_KEY'] = self._options.get('ACCESS_KEY_ID', None)
-        self._options['SECRET_KEY'] = self._options.get('SECRET_ACCESS_KEY', None)
-        self._options['BUCKET_NAME'] = self._options.get('STORAGE_BUCKET_NAME', None)
+        self._options['SECRET_KEY'] = self._options.get(
+            'SECRET_ACCESS_KEY', None)
+        self._options['BUCKET_NAME'] = self._options.get(
+            'STORAGE_BUCKET_NAME', None)
 
         # we use S3 compatible varibale names while django-storages doesn't
         _BUCKET_NAME = self._options.get('BUCKET_NAME', None)
         _DEFAULT_ACL = self._options.get('DEFAULT_ACL', 'private')
-        _BUCKET_ACL  = self._options.get('BUCKET_ACL', _DEFAULT_ACL)
+        _BUCKET_ACL = self._options.get('BUCKET_ACL', _DEFAULT_ACL)
         # in case it was not specified in OPTIONS default to 'private'
         self._options['BUCKET_ACL'] = _BUCKET_ACL
 
         # sanitize location by removing leading and traling slashes
-        self._LOCATION = self._options.get('LOCATION', self._options.get('location', ''))
+        self._LOCATION = self._options.get(
+            'LOCATION', self._options.get('location', ''))
 
         while self._LOCATION.startswith('/'):
             self._LOCATION = self._LOCATION[1:]
@@ -62,15 +63,14 @@ class AmazonS3Cache(BaseCache):
 
         # S3BotoStorage wants lower case names
         for name, value in self._options.items():
-            if value is not None: # skip None values
+            if value is not None:  # skip None values
                 self._options[name.lower()] = value
 
         self._storage = s3boto.S3BotoStorage(
-                                    acl=_DEFAULT_ACL,
-                                    bucket=_BUCKET_NAME,
-                                    **self._options
-                                )
-
+            acl=_DEFAULT_ACL,
+            bucket=_BUCKET_NAME,
+            **self._options
+        )
 
     def add(self, key, value, timeout=None, version=None):
         if self.has_key(key, version=version):
@@ -87,15 +87,16 @@ class AmazonS3Cache(BaseCache):
         try:
             f = self._storage.open(fname, 'rb')
             try:
-                exp = pickle.load(f)
+                data = f.read()
+                exp, value = self.decode(data)
                 now = time.time()
                 if exp < now:
                     self._delete(fname)
                 else:
-                    return pickle.load(f)
+                    return value
             finally:
                 f.close()
-        except (IOError, OSError, EOFError, pickle.PickleError):
+        except (IOError, OSError, EOFError, PickleException):
             pass
         return default
 
@@ -112,10 +113,9 @@ class AmazonS3Cache(BaseCache):
 
         try:
             now = time.time()
-            content = pickle.dumps(now + timeout, pickle.HIGHEST_PROTOCOL)
-            content += pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
+            content = self.encode((now + timeout, value))
             self._storage.save(fname, ContentFile(content))
-        except (IOError, OSError, EOFError, pickle.PickleError):
+        except (IOError, OSError, EOFError, PickleException):
             pass
 
     def delete(self, key, version=None):
@@ -136,7 +136,8 @@ class AmazonS3Cache(BaseCache):
         try:
             f = self._storage.open(fname, 'rb')
             try:
-                exp = pickle.load(f)
+                data = f.read()
+                exp, value = self.decode(data)
                 now = time.time()
                 if exp < now:
                     self._delete(fname)
@@ -145,7 +146,7 @@ class AmazonS3Cache(BaseCache):
                     return True
             finally:
                 f.close()
-        except (IOError, OSError, EOFError, pickle.PickleError):
+        except (IOError, OSError, EOFError, PickleException):
             return False
 
     def _cull(self):
@@ -163,7 +164,8 @@ class AmazonS3Cache(BaseCache):
         if self._cull_frequency == 0:
             doomed = keylist
         else:
-            doomed = [k for (i, k) in enumerate(keylist) if i % self._cull_frequency == 0]
+            doomed = [k for (i, k) in enumerate(
+                keylist) if i % self._cull_frequency == 0]
 
         try:
             self._storage.bucket.delete_keys(doomed, quiet=True)
@@ -200,5 +202,7 @@ class AmazonS3Cache(BaseCache):
             pass
 
 # For backwards compatibility
+
+
 class CacheClass(AmazonS3Cache):
     pass

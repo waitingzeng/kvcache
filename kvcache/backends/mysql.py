@@ -5,13 +5,24 @@ import base64
 import time
 import logging
 from datetime import datetime
-from .dbbase import DatabaseCache
+from .dbbase import DatabaseCache, BaseCache
 from .base import MEMCACHE_MAX_KEY_LENGTH
 import MySQLdb
 
 
 class MySQLDatabaseCache(DatabaseCache):
     place_hold = '%s'
+
+    def __init__(self, url, params):
+        BaseCache.__init__(self, params)
+        self._url = url
+        self.db = url.path
+        if self.db.find('.') != -1:
+            self.db, self._table = self.db.rsplit('.', 1)
+        else:
+            self._table = params.get('table', 'kvcache')
+        self.create()
+
     def create(self):
         ''' create collection '''
 
@@ -35,17 +46,17 @@ class MySQLDatabaseCache(DatabaseCache):
                     _status = False
                     break
                 _number += 1
-                logging.error('connection to mysql %s fail', self.uri)
+                logging.error('connection to mysql %s fail', self._url)
                 time.sleep(stime)
 
     def conn(self):
-        params = self.params
+        url = self._url
+        print url.hostname, url.port, url.username, url.password, self.db
         try:
             self._conn = MySQLdb.connect(
-                host=params['host'], port=params.get('port', 3306),
-                user=params['user'], passwd=params[
-                    'psw'],
-                db=params['db'])
+                host=url.hostname, port=url.port or 3306,
+                user=url.username, passwd=url.password,
+                db=self.db.lstrip('/'))
             return True
         except MySQLdb.OperationalError, err:
             pass
