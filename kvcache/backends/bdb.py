@@ -12,9 +12,10 @@ import os.path as osp
 
 class BDBCache(BaseCache):
 
-    def __init__(self, url, params, library, value_not_found_exception):
+    def __init__(self, url, params):
         super(BDBCache, self).__init__(params)
-        self._path = url.path.lstrip('/')
+        self._path = url.path
+        print self._path
 
     @property
     def _cache(self):
@@ -37,8 +38,13 @@ class BDBCache(BaseCache):
 
     def get(self, key, default=None, version=None):
         key = self.make_key(key, version=version)
-        data = self._cache.Get(key)
-        exp, val = self.decode(data)
+        data = self._cache.get(key)
+        if not data:
+            return default
+        try:
+            exp, val = self.decode(data)
+        except:
+            return None
         now = time.time()
         if exp > 0 and now > exp:
             self._cache.Delete(key)
@@ -49,8 +55,8 @@ class BDBCache(BaseCache):
         key = self.make_key(key, version=version)
         now = int(time.time())
         timeout = timeout and now + timeout or 0
-        data = self.encode(timeout, value)
-        self._cache.set(key, data)
+        data = self.encode((timeout, value))
+        self._cache[key] = data
 
     def delete(self, key, version=None):
         key = self.make_key(key, version=version)

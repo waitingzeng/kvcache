@@ -81,7 +81,7 @@ class BaseCache(object):
         except Exception, e:
             return default
 
-    def encode(self, value, default):
+    def encode(self, value):
         try:
             return pickle.dumps(value)
         except Exception, e:
